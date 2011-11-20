@@ -1,0 +1,71 @@
+Cliente
+=======
+
+Arquitectura geral
+------------------
+
+Depois de estabelecer ligação com o servidor local, o cliente fica a
+iterar dentro da função `loop' à espera de eventos vindos de `listen'.
+
+`listen' faz a chamada de sistema `select' para saber quando chegam
+dados vindos tanto do servidor local (socket locsrv) como do utilizador
+(ficheiro sys.stdin). Consoante o sítio de onde vieram os dados,
+`listen' chama e devolve o resultado de `read_stdin' ou `read_tcp'.
+
+`read_stdin' faz um parsing mínimo para determinar o comando introduzido
+pelo utilizador (e.g. UPDATE, DOWNLOAD), e chama um parser especializado
+caso seja um comando suportado. [1] Este usa expressões regulares para
+reconhecer todos os argumentos do comando do utilizador. No final, é
+devolvido um evento (`Event') correspondente ao comando inteiro, ou
+nada, se o comando não tiver sido correctamente reconhecido.
+
+`read_tcp' invoca o descodificador de eventos sobre a linha recebida
+pelo socket `locsrv', que devolve um evento, ou nada, consoante o êxito
+da descodificação.
+
+Um evento é um "dicionário" (Python dict) modificado para ter sempre o
+atributo `type', que corresponde ao tipo do evento, que pode ser o nome
+de um comando (e.g. 'update') ou de uma PDU (e.g. 'sAuthOK'). O
+dicionário em si contém quaisquer dados que sejam necessários para a
+descrição completa do evento. Por exemplo, numa sessão Python
+interactiva, depois da introdução de um comando UPDATE válido, tem-se o
+objecto `event' e:
+
+    >>> e
+    { data : [[ "Lj1", "A1", "fich.pdf", 42 ]] }
+    >>> e.type
+    'update'
+
+Um evento pode ser codificado numa string pronta para ser escrita para
+um socket e vice-versa. A codificação consiste na criação de um
+dicionário com duas entradas:
+
+- 'attrs': um dicionário com os atributos do evento; isto inclui o
+  atributo 'type' e outros que se possam ter incluído posteriormente;
+
+- 'data': um dicionário com todos os dados (pares chave/valor) do
+  evento.
+
+Este novo dicionário é convertido na sua representação em YAML [2]. Como
+esta representação é uma string com quebras de linha, espaços,
+caracteres em Unicode, é a seguir codificada em base 64 para poder ser
+transportada com mais robustez pelos sockets.
+
+`read_tcp' chama então o descodificador, que vai procurar reconstituir
+eventos recebidos, devolvendo sempre um evento ou nada, ou levantando
+excepções quando apropriado.
+
+Voltando à camada inferior: para cada evento recebido, `loop' vai chamar
+uma função de mapeamento (estado, evento) -> (estado, acção) e [... a
+história continua]
+
+
+[1] Estes parsers chamam-se, por enquanto, `update', `download', etc. e
+estão no módulo `commands'. São nomes pouco apropriados, uma vez que não
+geram acções.
+
+[2] YAML é um formato de serialização de dados à semelhança de JSON ou
+XML. <http://en.wikipedia.org/wiki/YAML>
+
+
+# vim: ft=mail
