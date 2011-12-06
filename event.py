@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from base64 import b64decode, b64encode
-from yaml import safe_dump, safe_load
+from myyaml import safe_dump, safe_load
 
 from utils import log
 
