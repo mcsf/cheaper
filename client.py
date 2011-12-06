@@ -68,24 +68,29 @@ locsrv = connection(SERVER_HOST, SERVER_PORT) # Socket to Local Server
 def listen():
     rl, _, _ = select.select([sys.stdin, locsrv], [], [])
     if rl:
+        # return a tuple (Event, bool)
+        # bool specifies whether Event should be sent to server
         if sys.stdin in rl:
-            return read_stdin(raw_input())
+            return (read_stdin(raw_input()), True)
         elif locsrv in rl:
-            return read_tcp(locsrv.recv(MAX_RECV).strip())
+            return (read_tcp(locsrv.recv(MAX_RECV).strip()), False)
+    return (None, False)
 
 
 def loop():
     quit = False
     while not quit:
         try:
-            event = listen()
+            event, outbound = listen()
         except ConnectionError:
             log('Connection closed by remote party.')
             quit = True
         else:
             if event is not None:
-                log('---')
                 log('Event of type', event.type)
+                if outbound:
+                    log('Sending to server')
+                    locsrv.send(event.encode())
 
 if __name__ == '__main__':
     if locsrv:
