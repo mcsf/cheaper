@@ -7,6 +7,7 @@ import time
 
 from commands import *
 from event import Event
+from exception import ConnectionError
 from state import client
 from utils import *
 
@@ -31,6 +32,8 @@ def read_stdin(s):
 
 
 def read_tcp(s):
+    if not s:
+        raise ConnectionError
     try:
         e = Event(decode=s)
         if e.type is not None: return e
@@ -72,21 +75,25 @@ def listen():
 
 
 def loop():
-    try:
-        quit = False
-        while not quit:
+    quit = False
+    while not quit:
+        try:
             event = listen()
+        except ConnectionError:
+            log('Connection closed by remote party.')
+            quit = True
+        else:
             if event is not None:
                 log('---')
                 log('Event of type', event.type)
 
-    except KeyboardInterrupt:
-        locsrv.close()
-        return
-
-
 if __name__ == '__main__':
-    if locsrv: loop()
-
+    if locsrv:
+        try:
+            loop()
+        except KeyboardInterrupt:
+            locsrv.close()
+        finally:
+            log('Exiting.')
 
 # vim: ts=8 et sw=4 sts=4 
