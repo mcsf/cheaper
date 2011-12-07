@@ -18,7 +18,7 @@ class Event(dict):
 
     def __init__(self, name=None, data=None, **kwargs):
         self.type = name
-        if data: self['data'] = data
+        self['data'] = data if data else []
         if 'decode' in kwargs:
             self.decode(kwargs['decode'])
 

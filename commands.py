@@ -3,6 +3,7 @@
 import re
 
 import event
+from pdu import pdu
 from utils import log
 
 def update(args):
@@ -29,7 +30,7 @@ def update(args):
                 % (shop, item, fpath, price))
         data.append((shop, item, fpath, price))
 
-    return event.UpdateEvent(data)
+    return event.Event(pdu.iUpdate, data)
 
 
 def download(args):

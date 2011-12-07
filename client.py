@@ -8,6 +8,7 @@ import time
 from commands import *
 from event import Event
 from exception import ConnectionError
+from pdu import pdu
 from state import client
 from utils import *
 
@@ -59,8 +60,10 @@ def connection(h, p):
 
 # GLOBALS ##############################################################
 
-state  = client.main_init
 locsrv = connection(SERVER_HOST, SERVER_PORT) # Socket to Local Server
+state  = client.main_connected
+user   = 'foo'
+passwd = 'bar'
 
 
 # MAIN #################################################################
@@ -68,29 +71,49 @@ locsrv = connection(SERVER_HOST, SERVER_PORT) # Socket to Local Server
 def listen():
     rl, _, _ = select.select([sys.stdin, locsrv], [], [])
     if rl:
-        # return a tuple (Event, bool)
-        # bool specifies whether Event should be sent to server
         if sys.stdin in rl:
-            return (read_stdin(raw_input()), True)
+            return read_stdin(raw_input())
         elif locsrv in rl:
-            return (read_tcp(locsrv.recv(MAX_RECV).strip()), False)
-    return (None, False)
-
+            return read_tcp(locsrv.recv(MAX_RECV).strip())
 
 def loop():
     quit = False
     while not quit:
+        log('Waiting in state', state)
         try:
-            event, outbound = listen()
+            in_event = listen()
         except ConnectionError:
             log('Connection closed by remote party.')
             quit = True
         else:
-            if event is not None:
-                log('Event of type', event.type)
-                if outbound:
-                    log('Sending to server')
-                    locsrv.send(event.encode())
+            if in_event is not None:
+                log('Inbound event of type', in_event.type)
+                out_event = process(in_event)
+                if out_event is not None:
+                    log('Outbound event of type', out_event.type)
+                    locsrv.send(out_event.encode())
+
+def process(event):
+    global state
+    if   state == client.main_connected:
+        if   event.type == pdu.iUpdate:
+            state = client.main_auth_u
+            return Event(pdu.cAuth, { 'user': user, 'passwd': passwd })
+        elif event.type == pdu.iDownload:
+            state = client.main_auth_u
+            return Event(pdu.cAuth, { 'user': user, 'passwd': passwd })
+        elif event.type == pdu.iSynch:
+            state = client.main_auth_u
+            return Event(pdu.cAuth, { 'user': user, 'passwd': passwd })
+
+    elif state == client.main_auth_u:
+        pass
+    elif state == client.main_auth_d:
+        pass
+    elif state == client.main_auth_s:
+        pass
+    elif state == client.main_ready:
+        pass
 
 if __name__ == '__main__':
     if locsrv:

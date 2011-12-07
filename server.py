@@ -8,6 +8,7 @@ import threading
 import utils
 from event import Event
 from exception import ConnectionError
+from pdu import pdu
 from state import server
 
 
@@ -63,7 +64,7 @@ class ClientHandler(threading.Thread):
         self.strid   = '[handler %s, client %s]' % (thr_no, client)
         self.channel = channel
         self.client  = client
-        self.state   = server.main_init
+        self.state   = server.main_anonymous
         thr_no += 1
         threading.Thread.__init__(self)
 
@@ -80,6 +81,16 @@ class ClientHandler(threading.Thread):
         utils.log(*msg)
         log_lock.release()
 
+    def process(self, event):
+        log('Processing event:', event)
+        if   self.state == server.main_anonymous:
+            if  event.type == pdu.cAuth:
+                if self.p_sAuthOK(event['data']):
+                    self.state = server.main_ready
+                    return Event(pdu.sAuthOK)
+                else:
+                    self.quit = True
+
     def read(self, s):
         if not s:
             raise ConnectionError
@@ -92,17 +103,33 @@ class ClientHandler(threading.Thread):
             self.log('Recv malformed data:', s)
             self.log(e)
 
+    def write(self, e):
+        self.channel.send(e.encode())
+
     def run(self):
         self.log('Handling connections from client', self.client)
-        quit = False
-        while not quit:
+        self.quit = False
+        while not self.quit:
+            self.log('Waiting in state', self.state)
             try:
-                event = self.listen()
+                in_event = self.listen()
             except ConnectionError:
-                quit = True
+                self.quit = True
             else:
-                if event is not None:
-                    log('Event of type', event.type)
+                if in_event is not None:
+                    log('Inbound event of type', in_event.type)
+                    out_event = self.process(in_event)
+                    if out_event is not None:
+                        log('Outbound event of type', out_event.type)
+                        self.write(out_event)
+        self.log('Thread closing.')
+        self.channel.close()
+
+
+    # Predicates
+    def p_sAuthOK(self, data):
+        return data['user'] == 'foo'\
+                and data['passwd'] == 'bar'
 
 
 class ServerHandler(threading.Thread):

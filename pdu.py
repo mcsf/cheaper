@@ -3,6 +3,11 @@
 from enum import Enum
 
 pdu = Enum([
+    'iUpdate',
+    'iDownload',
+    'iSynch',
+    'iQuit',
+
     'cAuth',
     'sAuthOK',
     'sAuthErr',
