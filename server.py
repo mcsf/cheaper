@@ -3,6 +3,7 @@
 import os
 import select
 import socket
+import sys
 import threading
 
 import utils
@@ -14,11 +15,22 @@ from state import server
 
 # SETTINGS #############################################################
 
-MAX_RECV    = 512
 SERVER_PORT = 8888
+MAX_RECV    = 512
+MDB         = 'mDBs.dat'
+SHOPS       = 'Shops.dat'
+USERS       = 'Users.dat'
 
 
 # MISC #################################################################
+
+def checkargs():
+    argn = len(sys.argv)
+    if argn != 4:
+        raise Exception('Expected 3 arguments, got %s.' % str(argn - 1))
+    else:
+        return (int(sys.argv[1]), sys.argv[2], sys.argv[3])
+
 
 def log(*msg):
     global log_lock
@@ -51,9 +63,6 @@ def sock_udp(h, p):
 log_lock = threading.Lock()
 thr_no = 1 # global counter for server threads
 
-c_tcp  = sock_tcp('', SERVER_PORT) # For incoming client PDUs
-#c_udp  = sock_udp('', SERVER_PORT) # For incoming server PDUs
-
 
 # SERVER THREADS #######################################################
 
@@ -82,7 +91,7 @@ class ClientHandler(threading.Thread):
         log_lock.release()
 
     def process(self, event):
-        log('Processing event:', event)
+        self.log('Processing event:', event)
         if   self.state == server.main_anonymous:
             if  event.type == pdu.cAuth:
                 if self.p_sAuthOK(event['data']):
@@ -117,10 +126,10 @@ class ClientHandler(threading.Thread):
                 self.quit = True
             else:
                 if in_event is not None:
-                    log('Inbound event of type', in_event.type)
+                    self.log('Inbound event of type', in_event.type)
                     out_event = self.process(in_event)
                     if out_event is not None:
-                        log('Outbound event of type', out_event.type)
+                        self.log('Outbound event of type', out_event.type)
                         self.write(out_event)
         self.log('Thread closing.')
         self.channel.close()
@@ -128,8 +137,15 @@ class ClientHandler(threading.Thread):
 
     # Predicates
     def p_sAuthOK(self, data):
-        return data['user'] == 'foo'\
-                and data['passwd'] == 'bar'
+        user   = data['user']
+        passwd = data['passwd']
+
+        with open(USERS, 'r') as f:
+            for line in f.readlines():
+                u, p = line.split()
+                if user == u and passwd == p:
+                    return True
+            return False
 
 
 class ServerHandler(threading.Thread):
@@ -138,6 +154,14 @@ class ServerHandler(threading.Thread):
 # MAIN #################################################################
 
 if __name__ == '__main__':
+
+    # Process and get arguments
+    port, shops, users = checkargs()
+
+    # Start listening
+    c_tcp  = sock_tcp('', port) # For incoming client PDUs
+    #c_udp  = sock_udp('', port) # For incoming server PDUs
+
     if c_tcp:
         while True:
             new_chan, new_client = c_tcp.accept()

@@ -15,9 +15,10 @@ from utils import *
 
 # SETTINGS #############################################################
 
-MAX_RECV    = 512
-SERVER_HOST = 'localhost'
-SERVER_PORT = 8888
+MAX_RECV = 512
+MDB      = 'mDBs.dat'
+SHOPS    = 'Shops.dat'
+USERS    = 'Users.dat'
 
 
 # INPUT PROCESSING #####################################################
@@ -60,13 +61,25 @@ def connection(h, p):
 
 # GLOBALS ##############################################################
 
-locsrv = connection(SERVER_HOST, SERVER_PORT) # Socket to Local Server
-state  = client.main_connected
-user   = 'foo'
-passwd = 'bar'
+state  = client.main_init
+s_data = None # State related data (see: transition from auth_u to wait)
 
 
 # MAIN #################################################################
+
+def checkargs():
+    argn = len(sys.argv)
+    if argn != 4:
+        raise Exception('Expected 3 arguments, got %s.' % str(argn - 1))
+    else:
+        return sys.argv[1:]
+
+def getServer(srvId):
+    with open(MDB, 'r') as f:
+        for line in f.readlines():
+            fields = line.split()
+            if fields[0] == srvId:
+                return (fields[1], int(fields[2]))
 
 def listen():
     rl, _, _ = select.select([sys.stdin, locsrv], [], [])
@@ -115,13 +128,28 @@ def process(event):
     elif state == client.main_ready:
         pass
 
+
 if __name__ == '__main__':
+
+    # Process and get arguments
+    user, passwd, srvId = checkargs()
+
+    # Connect to server
+    try:
+        host, port = getServer(srvId)
+    except TypeError:
+        raise Exception('Unknown server ID.')
+    else:
+        locsrv = connection(host, port)
+
     if locsrv:
+        state = client.main_connected
         try:
             loop()
         except KeyboardInterrupt:
             locsrv.close()
         finally:
             log('Exiting.')
+
 
 # vim: ts=8 et sw=4 sts=4 
