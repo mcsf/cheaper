@@ -229,4 +229,4 @@ if __name__ == '__main__':
             log('Exiting.')
 
 
-# vim: ts=8 et sw=4 sts=4 
+# vim: ts=8 et sw=4 sts=4 fen fdm=marker

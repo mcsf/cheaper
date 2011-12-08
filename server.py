@@ -11,10 +11,12 @@ from event import Event
 from exception import ConnectionError
 from pdu import pdu
 from state import server
+from storage import DB, Cache
 
 
 # SETTINGS #############################################################
 
+DB_FILE     = 'data.db'
 SERVER_PORT = 8888
 MAX_RECV    = 512
 MDB         = 'mDBs.dat'
@@ -61,7 +63,9 @@ def sock_udp(h, p):
 # GLOBALS ##############################################################
 
 log_lock = threading.Lock()
-thr_no = 1 # global counter for server threads
+thr_no   = 1
+db       = DB(DB_FILE, threading.Lock())
+cache    = Cache(threading.Lock())
 
 
 # SERVER THREADS #######################################################
@@ -74,6 +78,7 @@ class ClientHandler(threading.Thread):
         self.channel = channel
         self.client  = client
         self.state   = server.main_anonymous
+        self.user    = None
         thr_no += 1
         threading.Thread.__init__(self)
 
@@ -108,7 +113,8 @@ class ClientHandler(threading.Thread):
                 if self.p_updShopOK(d) and self.p_updValueOK(d):
                     if self.p_updFile(d):
                         self.a_updRecvFile(d)
-                    # do stuff
+                    # Table structure is (store, item, fpath, price, user)
+                    db.update(*(d + [self.user]))
                     return Event(pdu.sUpdOK)
                 else:
                     return Event(pdu.sUpdErr)
@@ -123,7 +129,8 @@ class ClientHandler(threading.Thread):
 
     # Predicates
     def p_sAuthOK(self, d):
-        self.strid = '[handler %s, client %s]' % (thr_no, d['user'])
+        self.user  = d['user']
+        self.strid = '[handler %s, client %s]' % (thr_no, self.user)
         return users.get(d['user']) == d['passwd']
 
     def p_updShopOK(self, d):
@@ -216,4 +223,4 @@ if __name__ == '__main__':
             log('Accepted new connection.')
 
 
-# vim: ts=8 et sw=4 sts=4 
+# vim: ts=8 et sw=4 sts=4 fen fdm=marker
