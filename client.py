@@ -90,9 +90,11 @@ def listen():
             return read_tcp(locsrv.recv(MAX_RECV).strip())
 
 def loop():
+    global quit
     quit = False
+
     while not quit:
-        log('Waiting in state', state)
+        log('STAT', state)
         try:
             in_event = listen()
         except ConnectionError:
@@ -100,33 +102,108 @@ def loop():
             quit = True
         else:
             if in_event is not None:
-                log('Inbound event of type', in_event.type)
+                log('RECV', in_event.type)
                 out_event = process(in_event)
                 if out_event is not None:
-                    log('Outbound event of type', out_event.type)
+                    log('SEND', out_event.type)
                     locsrv.send(out_event.encode())
 
 def process(event):
-    global state
-    if   state == client.main_connected:
-        if   event.type == pdu.iUpdate:
-            state = client.main_auth_u
-            return Event(pdu.cAuth, { 'user': user, 'passwd': passwd })
-        elif event.type == pdu.iDownload:
-            state = client.main_auth_u
-            return Event(pdu.cAuth, { 'user': user, 'passwd': passwd })
-        elif event.type == pdu.iSynch:
-            state = client.main_auth_u
-            return Event(pdu.cAuth, { 'user': user, 'passwd': passwd })
+    global state, s_data, quit
+    d = event['data']
 
-    elif state == client.main_auth_u:
+    if state == client.main_connected: # {{{
+        if event.type == pdu.iUpdate:
+            state  = client.main_auth_u
+            s_data = d
+            data = { 'user': user, 'passwd': passwd }
+            return Event(pdu.cAuth, data)
+
+        elif event.type == pdu.iDownload:
+            state  = client.main_auth_u
+            s_data = d
+            data = { 'user': user, 'passwd': passwd }
+            return Event(pdu.cAuth, data)
+
+        elif event.type == pdu.iSynch:
+            state  = client.main_auth_u
+            s_data = d
+            data = { 'user': user, 'passwd': passwd }
+            return Event(pdu.cAuth, data)
+
+        elif event.type == pdu.iQuit:
+            quit = True
+    # }}}
+
+    elif state == client.main_auth_u: # {{{
+        if event.type == pdu.sAuthOK:
+            state = client.upd_wait
+            shop  = s_data['shop']
+            query = s_data['queries'][0]
+            return Event(pdu.cUpdate, [shop] + query)
+    # }}}
+
+    elif state == client.main_auth_d: # {{{
         pass
-    elif state == client.main_auth_d:
+    # }}}
+
+    elif state == client.main_auth_s: # {{{
         pass
-    elif state == client.main_auth_s:
-        pass
-    elif state == client.main_ready:
-        pass
+    # }}}
+
+    elif state == client.main_ready: # {{{
+        if event.type == pdu.iUpdate:
+            state  = client.upd_wait
+            s_data = d
+            shop   = s_data['shop']
+            query  = s_data['queries'][0]
+            return Event(pdu.cUpdate, [shop] + query)
+    # }}}
+
+    elif state == client.upd_wait: # {{{
+        if event.type == pdu.sUpdOK:
+            if p_updFile(d):
+                a_updSend(d)
+            if p_updRem(d):
+                shop  = s_data['shop']
+                query = s_data['queries'][0]
+                return Event(pdu.cUpdate, [shop] + query)
+            else:
+                a_updOK(d)
+                state = client.main_ready
+                return
+
+        elif event.type == pdu.sUpdErr:
+            a_updErr(d)
+            state = client.main_ready
+            return
+    # }}}
+
+
+# PREDICATES ###########################################################
+
+def p_updFile(d):
+    return bool(s_data['queries'][0][1])
+
+def p_updRem(d):
+    global s_data
+    s_data['queries'].pop(0)
+    return bool(s_data['queries'])
+
+
+# ACTIONS ##############################################################
+
+def a_updOK(d):
+    log('Update OK')
+
+def a_updErr(d):
+    log('Update error.')
+
+def a_updSend(d):
+    global s_data
+    log('Sending file', s_data['queries'][0][1])
+
+########################################################################
 
 
 if __name__ == '__main__':
