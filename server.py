@@ -70,7 +70,7 @@ class ClientHandler(threading.Thread):
     def __init__(self, channel, client):
         global thr_no
         self.count   = thr_no
-        self.strid   = '[handler %s, client %s]' % (thr_no, client)
+        self.strid   = '[handler %s]' % thr_no
         self.channel = channel
         self.client  = client
         self.state   = server.main_anonymous
@@ -123,6 +123,7 @@ class ClientHandler(threading.Thread):
 
     # Predicates
     def p_sAuthOK(self, d):
+        self.strid = '[handler %s, client %s]' % (thr_no, d['user'])
         return users.get(d['user']) == d['passwd']
 
     def p_updShopOK(self, d):
@@ -135,6 +136,9 @@ class ClientHandler(threading.Thread):
         return bool(d[2])
 
     # Actions
+    def a_updProcess(self, d):
+        pass
+
     def a_updRecvFile(self, d):
         pass
 
@@ -192,9 +196,8 @@ if __name__ == '__main__':
             s = [i.strip() for i in p[1].split(',')]
             shops[h] = s
 
-    hostname = 'S1' # will call some sort of gethostname
+    hostname = 'S1' # should call some sort of gethostname
     localshops = shops[hostname]
-    log(localshops)
 
     users = {}
     with open(f_users, 'r') as f:
