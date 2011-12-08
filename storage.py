@@ -6,7 +6,7 @@ class DB:
     def __init__(self, fpath):
 	self.con = sqlite3.connect(fpath)
 	self.cur = self.con.cursor()
-        if self.isEmpty(): self.setup()
+        if self.isEmpty(): self._setup()
 
     def close(self):
         self.con.close()
@@ -19,17 +19,37 @@ class DB:
         self.cur.execute(query)
         return len(self.cur.fetchall()) == 0
 
-    def setup(self):
+    def _setup(self):
         query = '''
             CREATE TABLE data (store VARCHAR(20), item VARCHAR(20), fpath
-            VARCHAR(20), price NUMERIC(10,2), author VARCHAR(20));
+            VARCHAR(20), price NUMERIC(10,2), author VARCHAR(20), PRIMARY KEY
+            (store, item));
         '''
         self.cur.execute(query)
 
-    def insert(self, store, item, fpath, price, author):
+    def insert(self, store, item, fpath, price, author, replace=False):
+        if not fpath: fpath = ''
+        statement = 'REPLACE' if replace else 'INSERT'
         query = '''
-            INSERT INTO data VALUES ('%s', '%s', '%s', %s, '%s')
-        ''' % (store, item, fpath, price, author)
+            %s INTO data VALUES ('%s', '%s', '%s', %s, '%s')
+        ''' % (statement, store, item, fpath, price, author)
+        self.cur.execute(query)
+        self.con.commit()
+
+    def update(self, store, item, fpath, price, author):
+        return self.insert(store, item, fpath, price, author, True)
+
+    def remove(self, **args):
+        if 'item' not in args:
+            raise Exception('Missing keyword \'item\'')
+
+        query = '''
+            DELETE FROM data WHERE item = '%s' 
+        ''' % args['item']
+
+        if 'store' in args:
+            query += '''AND store = '%s' ''' % args['store']
+
         self.cur.execute(query)
         self.con.commit()
 
