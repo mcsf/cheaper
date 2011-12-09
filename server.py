@@ -18,7 +18,7 @@ from storage import DB, Cache
 
 DB_FILE     = 'data.db'
 SERVER_PORT = 8888
-MAX_RECV    = 512
+MAX_RECV    = 1024
 MDB         = 'mDBs.dat'
 SHOPS       = 'Shops.dat'
 USERS       = 'Users.dat'
@@ -113,6 +113,7 @@ class ClientHandler(threading.Thread):
                 if self.p_updShopOK(d) and self.p_updValueOK(d):
                     if self.p_updFile(d):
                         self.a_updRecvFile(d)
+                    # TODO: actually transfer file or keep old one
                     # Table structure is (store, item, fpath, price, user)
                     db.update(*(d + [self.user]))
                     return Event(pdu.sUpdOK)

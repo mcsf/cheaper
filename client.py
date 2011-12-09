@@ -144,7 +144,9 @@ def process(event):
     # }}}
 
     elif state == client.main_auth_d: # {{{
-        pass
+        if event.type == pdu.sAuthOK:
+            state = client.dwn_wait
+            return Event(pdu.cDownload, s_data)
     # }}}
 
     elif state == client.main_auth_s: # {{{
@@ -158,6 +160,10 @@ def process(event):
             shop   = s_data['shop']
             query  = s_data['queries'][0]
             return Event(pdu.cUpdate, [shop] + query)
+
+        elif event.type == pdu.iDownload:
+            state = client.dwn_wait
+            return Event(pdu.cDownload, d)
     # }}}
 
     elif state == client.upd_wait: # {{{
@@ -179,9 +185,48 @@ def process(event):
             return
     # }}}
 
+    elif state == client.dwn_wait: # {{{
+        if event.type == pdu.sDwnInfo:
+            if p_dwnFile(d):
+                # connect to some server for file retrieval
+                # ...
+                state = client.dwn_recv
+                return Event(pdu.cDwnFile)
+            else:
+                a_dwnOK(d)
+                state = client.main_ready
+                return
+    # }}}
+
+    elif state == client.dwn_recv:
+        if event.type == pdu.sDwnFile:
+            # close connection to file server
+            # ...
+            a_dwnOK(d)
+            state = client.main_ready
+            return
+
+        elif event.type == pdu.sDwnFileErr:
+            # close connection to file server
+            # ...
+            a_dwnErr(d)
+            state = client.main_ready
+            return
+
+        elif event.type == 'foo':
+            # TODO: event signaling a connection closed by file server
+            state = client.main_ready
+            return
+
+        elif event.type == 'foo':
+            # TODO: event signaling a timeout from file server
+            state = client.main_ready
+            return
+
 
 # PREDICATES ###########################################################
 
+# TODO: actually transfer or keep old one
 def p_updFile(d):
     return bool(s_data['queries'][0][1])
 
@@ -190,6 +235,8 @@ def p_updRem(d):
     s_data['queries'].pop(0)
     return bool(s_data['queries'])
 
+def p_dwnFile(d):
+    pass
 
 # ACTIONS ##############################################################
 
@@ -202,6 +249,9 @@ def a_updErr(d):
 def a_updSend(d):
     global s_data
     log('Sending file', s_data['queries'][0][1])
+
+def a_dwnOK(d):
+    log('Download OK')
 
 ########################################################################
 
