@@ -17,8 +17,9 @@ from utils import *
 
 MAX_RECV = 512
 MDB      = 'mDBs.dat'
-SHOPS    = 'Shops.dat'
-USERS    = 'Users.dat'
+DEF_USER = 'guest'
+DEF_PASS = 'guest'
+DEF_SERV = 'S1'
 
 
 # INPUT PROCESSING #####################################################
@@ -69,10 +70,13 @@ s_data = None # State related data (see: transition from auth_u to wait)
 
 def checkargs():
     argn = len(sys.argv)
-    if argn != 4:
-        raise Exception('Expected 3 arguments, got %s.' % str(argn - 1))
-    else:
-        return sys.argv[1:]
+
+    i = 1 if (argn > 1 and sys.argv[1] == '/v') else 0
+    return (
+        sys.argv[1+i] if argn > 1+i else DEF_USER,
+        sys.argv[2+i] if argn > 2+i else DEF_PASS,
+        sys.argv[3+i] if argn > 3+i else DEF_SERV,
+        bool(i)) # fourth value is verbose switch
 
 def getServer(srvId):
     with open(MDB, 'r') as f:
@@ -259,7 +263,7 @@ def a_dwnOK(d):
 if __name__ == '__main__':
 
     # Process and get arguments
-    user, passwd, srvId = checkargs()
+    user, passwd, srvId, verbose = checkargs()
 
     # Connect to server
     try:

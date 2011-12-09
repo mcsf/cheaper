@@ -28,10 +28,10 @@ USERS       = 'Users.dat'
 
 def checkargs():
     argn = len(sys.argv)
-    if argn != 4:
-        raise Exception('Expected 3 arguments, got %s.' % str(argn - 1))
-    else:
-        return (int(sys.argv[1]), sys.argv[2], sys.argv[3])
+    return (
+        int(sys.argv[1]) if argn > 1 else SERVER_PORT,
+        sys.argv[2] if argn > 2 else SHOPS,
+        sys.argv[3] if argn > 3 else USERS)
 
 
 def log(*msg):

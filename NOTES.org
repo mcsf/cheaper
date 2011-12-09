@@ -40,16 +40,6 @@
 **** TODO Optional: remove expired entries as soon as possible
      Set up a timed removal of the expired entries.
 
-*** TODO Program invocation
-    Client and server invocation can have some arguments ommited. 
-
-    This is the intended syntax:
-
-    Shops [port [Shops.dat [Users.dat]]]
-    Cheaper [/v] [User [Password [LocalServer]]]
-
-    If a ommited, a default value will be used.
-
 
 ** Superfulous [0/1]
 *** TODO Readline for the client CLI.
