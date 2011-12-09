@@ -57,7 +57,9 @@ def sock_tcp(h, p):
     return s
 
 def sock_udp(h, p):
-    return socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.bind((h, p))
+    return s
 
 
 # GLOBALS ##############################################################
@@ -73,6 +75,9 @@ cache    = Cache(threading.Lock())
 class ClientHandler(threading.Thread):
     def __init__(self, channel, client):
         global thr_no
+
+        threading.Thread.__init__(self)
+        self.daemon  = True
         self.count   = thr_no
         self.strid   = '[handler %s]' % thr_no
         self.channel = channel
@@ -80,7 +85,6 @@ class ClientHandler(threading.Thread):
         self.state   = server.main_anonymous
         self.user    = None
         thr_no += 1
-        threading.Thread.__init__(self)
 
     def listen(self):
         rl, _, _ = select.select([self.channel], [], [])
@@ -187,7 +191,25 @@ class ClientHandler(threading.Thread):
 
 
 class ServerHandler(threading.Thread):
-    pass # this will eventually handle UDP stuff
+    def __init__(self, channel):
+        threading.Thread.__init__(self)
+        self.channel = channel
+        self.quit = False
+        self.daemon = True
+
+    def read(self, data, src):
+        if not data: raise ConnectionError
+        if data == 'quit':
+            self.quit = True
+        print 'Datagram from %s: %s' % (src, data)
+
+    def run(self):
+        while not self.quit:
+            rl, _, _ = select.select([self.channel], [], [])
+            if rl:
+                if self.channel in rl:
+                    self.read(*self.channel.recvfrom(MAX_RECV))
+
 
 # MAIN #################################################################
 
@@ -215,7 +237,10 @@ if __name__ == '__main__':
 
     # Start listening
     c_tcp  = sock_tcp('', port) # For incoming client PDUs
-    #c_udp  = sock_udp('', port) # For incoming server PDUs
+    c_udp  = sock_udp('', port) # For incoming server PDUs
+
+    if c_udp:
+        ServerHandler(c_udp).start()
 
     if c_tcp:
         while True:
