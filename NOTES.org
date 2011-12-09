@@ -1,0 +1,64 @@
+* Unimplemented
+
+** File transfer status
+   File transfers between the client and the server need to be handled
+   in chunks and work in parallel. *This works both ways.*
+   
+*** Implementation ideas
+    When the client initiates a transfer, it picks an ID for the
+    transaction and adds the job to a "pending transfers
+    table". Whenever a new "sDwnFile" PDU is received, it gets
+    processed: data is written to the file and its transfer table
+    entry is updated.
+
+    We need to work on the assumption that PDUs will be received out
+    of order, so we need to keep track of any missing chunks of the
+    file.
+
+**** Additional considerations
+     - A method to verify if a local file is the same as the one on
+       the server. Checksum?
+     - Transfer time out. If we get another request for a file that's
+       still transfering (same name and checksum), we may either discard the new request or add
+       it to the current transfer's "retry upon timeout" list.
+       If it has another checksum, we cancel the current transfer and
+       start a new one.
+      
+
+* Issues
+
+** Important [0/2]
+
+*** TODO TTL in cache DB
+    The items in the cache have a TTL, but the ones in the disk don't.
+
+    The specification says that the items are to be removed from the
+    cache after the TTL expires, but it's more simple to add a
+    valid-until value to the table, which is set to current time +
+    TTL.
+
+**** TODO Optional: remove expired entries as soon as possible
+     Set up a timed removal of the expired entries.
+
+*** TODO Program invocation
+    Client and server invocation can have some arguments ommited. 
+
+    This is the intended syntax:
+
+    Shops [port [Shops.dat [Users.dat]]]
+    Cheaper [/v] [User [Password [LocalServer]]]
+
+    If a ommited, a default value will be used.
+
+
+** Superfulous [0/1]
+*** TODO Readline for the client CLI.
+    Shouldn't be hard to do for simple history and line editing.
+    Command completion would be nice, but truly superfulous.
+
+
+* NOTES
+** Joao
+I changed the "CREATE TABLE" in storage.py to be consistent with the
+real sqlite3 types.
+
