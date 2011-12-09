@@ -194,21 +194,32 @@ class ServerHandler(threading.Thread):
     def __init__(self, channel):
         threading.Thread.__init__(self)
         self.channel = channel
-        self.quit = False
         self.daemon = True
 
     def read(self, data, src):
         if not data: raise ConnectionError
-        if data == 'quit':
-            self.quit = True
-        print 'Datagram from %s: %s' % (src, data)
+        log('Datagram from %s: %s' % (src, data))
+        return Event('foo')
+
+    def log(self, *s):
+        utils.log('[udp]', *s)
+
+    def listen(self):
+        rl, _, _ = select.select([self.channel], [], [])
+        if rl:
+            if self.channel in rl:
+                return self.read(*self.channel.recvfrom(MAX_RECV))
 
     def run(self):
-        while not self.quit:
-            rl, _, _ = select.select([self.channel], [], [])
-            if rl:
-                if self.channel in rl:
-                    self.read(*self.channel.recvfrom(MAX_RECV))
+        while True:
+            #self.log('STAT', self.state)
+            in_event = self.listen()
+            if in_event is not None:
+                self.log('RECV', in_event.type)
+                #out_event = self.process(in_event)
+                #if out_event is not None:
+                #    self.log('SEND', out_event.type)
+                #    self.write(out_event)
 
 
 # MAIN #################################################################
