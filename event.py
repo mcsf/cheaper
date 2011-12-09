@@ -5,6 +5,8 @@ from myyaml import safe_dump, safe_load
 
 from utils import log
 
+MAX_SIZ = 1024
+
 # To decode serialized Events, either will do:
 #
 #   e = Event()
@@ -26,7 +28,10 @@ class Event(dict):
         data = {}
         data['attrs'] = self.__dict__.copy()
         data['data']  = self.copy()
-        return b64encode(safe_dump(data))
+        s = b64encode(safe_dump(data))
+        # Make sure we never send something too big
+        assert len(s) <= MAX_SIZ
+        return s
 
     def decode(self, s):
         try:
