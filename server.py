@@ -160,11 +160,8 @@ class ClientHandler(threading.Thread):
         try:
             e = Event(decode=s)
             if e.type is not None: return e
-        except Exception, e:
-            self.log('---')
-            raise e
-            self.log('Recv malformed data:', s)
-            self.log(e)
+        except Exception:
+            self.log('WARN Recv malformed data:', s)
 
     def write(self, e):
         self.channel.send(e.encode())
@@ -190,6 +187,26 @@ class ClientHandler(threading.Thread):
 
 
 class ServerHandler(threading.Thread):
+    def __init__(self, rqst, dst, channel):
+        global thr_no
+        thr_no += 1
+
+        threading.Thread.__init__(self)
+        self.strid   = '[udp-handler %s]' % thr_no
+        self.rqst    = rqst
+        self.dst     = dst
+        self.channel = channel
+        self.daemon  = True
+
+    def log(self, *msg):
+        utils.log(self.strid, *msg)
+
+    def run(self):
+        self.log('Got request of type %s from %s' % (self.rqst.type, self.dst))
+        self.channel.sendto('Hello', self.dst)
+
+
+class UDPListener(threading.Thread):
     def __init__(self, channel):
         threading.Thread.__init__(self)
         self.channel = channel
@@ -197,8 +214,12 @@ class ServerHandler(threading.Thread):
 
     def read(self, data, src):
         if not data: raise ConnectionError
-        log('Datagram from %s: %s' % (src, data))
-        return Event('foo')
+        try:
+            e = Event(decode=data)
+        except Exception:
+            self.log('WARN Recv malformed data:', s)
+        else:
+            if e.type is not None: return (e, src)
 
     def log(self, *s):
         utils.log('[udp]', *s)
@@ -211,14 +232,10 @@ class ServerHandler(threading.Thread):
 
     def run(self):
         while True:
-            #self.log('STAT', self.state)
-            in_event = self.listen()
-            if in_event is not None:
-                self.log('RECV', in_event.type)
-                #out_event = self.process(in_event)
-                #if out_event is not None:
-                #    self.log('SEND', out_event.type)
-                #    self.write(out_event)
+            event, src = self.listen()
+            if event is not None:
+                self.log('RECV', event.type)
+                ServerHandler(event, src, self.channel).start()
 
 
 # MAIN #################################################################
@@ -250,7 +267,7 @@ if __name__ == '__main__':
     c_udp  = sock_udp('', port) # For incoming server PDUs
 
     if c_udp:
-        ServerHandler(c_udp).start()
+        UDPListener(c_udp).start()
 
     if c_tcp:
         while True:
