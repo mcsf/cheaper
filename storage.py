@@ -22,8 +22,8 @@ class DB:
 
     def _setup(self):
         query = '''
-            CREATE TABLE data (store VARCHAR(20), item VARCHAR(20), fpath
-            VARCHAR(20), price NUMERIC(10,2), user VARCHAR(20), PRIMARY KEY
+            CREATE TABLE data (store TEXT, item TEXT, fpath
+            TEXT, price NUMERIC, user TEXT, PRIMARY KEY
             (store, item));
         '''
         self.lock.acquire()
