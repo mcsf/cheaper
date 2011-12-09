@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from base64 import b64decode, b64encode
+###from base64 import b64decode, b64encode
 from myyaml import safe_dump, safe_load
 
 from utils import log
@@ -28,14 +28,16 @@ class Event(dict):
         data = {}
         data['attrs'] = self.__dict__.copy()
         data['data']  = self.copy()
-        s = b64encode(safe_dump(data))
+        ###s = b64encode(safe_dump(data))
+        s = safe_dump(data)
         # Make sure we never send something too big
         assert len(s) <= MAX_SIZ
         return s
 
     def decode(self, s):
         try:
-            data = safe_load(b64decode(s))
+            ###data = safe_load(b64decode(s))
+            data = safe_load(s)
         except Exception, e:
             raise Exception('Malformed input: %s' % e)
 

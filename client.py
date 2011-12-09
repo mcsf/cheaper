@@ -4,6 +4,7 @@ import select
 import socket
 import sys
 import time
+import threading
 
 from commands import *
 from event import Event
@@ -15,11 +16,12 @@ from utils import *
 
 # SETTINGS #############################################################
 
-MAX_RECV = 512
+MTU      = 1024
 MDB      = 'mDBs.dat'
 DEF_USER = 'guest'
 DEF_PASS = 'guest'
 DEF_SERV = 'S1'
+FILE_DIR = 'files'
 
 
 # INPUT PROCESSING #####################################################
@@ -66,6 +68,34 @@ state  = client.main_init
 s_data = None # State related data (see: transition from auth_u to wait)
 
 
+# WORKER THREADS #######################################################
+
+class FileUploader(threading.Thread):
+    def __init__(self, channel, fpath):
+        threading.Thread.__init__(self)
+        self.channel = channel
+        self.fpath   = fpath
+
+    def run(self):
+        with open(FILE_DIR + '/' + self.fpath) as f:
+            # Size of an empty transfer PDU
+            hdr_siz = len(Event(pdu.cUpdSending).encode())
+
+            siz = MTU - hdr_siz
+            while True:
+                chunk = f.read(siz)
+                #print repr(chunk)
+                if not chunk: break
+                e = Event(pdu.cUpdSending, chunk)
+                self.channel.send(e.encode())
+            self.channel.send(Event(pdu.cUpdSendDone).encode())
+        # a_updOK(...)
+
+
+class FileDowloader(threading.Thread):
+    pass
+
+
 # MAIN #################################################################
 
 def checkargs():
@@ -91,7 +121,7 @@ def listen():
         if sys.stdin in rl:
             return read_stdin(raw_input())
         elif locsrv in rl:
-            return read_tcp(locsrv.recv(MAX_RECV).strip())
+            return read_tcp(locsrv.recv(MTU).strip())
 
 def loop():
     global quit
@@ -184,6 +214,10 @@ def process(event):
         elif event.type == pdu.iDownload:
             state = client.dwn_wait
             return Event(pdu.cDownload, d)
+
+        elif event.type == pdu.iQuit:
+            quit = True
+            return
     # }}}
 
     elif state == client.upd_wait: # {{{
@@ -218,7 +252,7 @@ def process(event):
                 return
     # }}}
 
-    elif state == client.dwn_recv:
+    elif state == client.dwn_recv: # {{{
         if event.type == pdu.sDwnFile:
             # close connection to file server
             # ...
@@ -242,6 +276,7 @@ def process(event):
             # TODO: event signaling a timeout from file server
             state = client.main_ready
             return
+    # }}}
 
 
 # PREDICATES ###########################################################

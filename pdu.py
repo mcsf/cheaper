@@ -15,6 +15,8 @@ pdu = Enum([
     'cUpdate',
     'sUpdOK',
     'sUpdErr',
+    'cUpdSending',
+    'cUpdSendDone',
 
     'cDownload',
     'sDwnInfo',

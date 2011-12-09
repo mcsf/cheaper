@@ -201,9 +201,19 @@ class ServerHandler(threading.Thread):
     def log(self, *msg):
         utils.log(self.strid, *msg)
 
+    def write(self, s):
+        self.channel.sendto(s, self.dst)
+
     def run(self):
-        self.log('Got request of type %s from %s' % (self.rqst.type, self.dst))
-        self.channel.sendto('Hello', self.dst)
+        self.log('RECV %s FROM %s' % (self.rqst.type, self.dst))
+        if self.rqst.type == pdu.sDwnRqst:
+            pass
+        elif self.rqst.type == pdu.sDwnResp:
+            pass
+        elif self.rqst.type == pdu.sSynRqst:
+            pass
+        elif self.rqst.type == pdu.sSynResp:
+            pass
 
 
 class UDPListener(threading.Thread):
