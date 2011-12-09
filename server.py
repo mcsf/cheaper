@@ -110,6 +110,7 @@ class ClientHandler(threading.Thread):
                     return Event(pdu.sAuthOK)
                 else:
                     self.quit = True
+                    return Event(pdu.sAuthErr)
         # }}}
 
         elif self.state == server.main_ready: # {{{

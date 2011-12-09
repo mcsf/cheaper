@@ -145,16 +145,31 @@ def process(event):
             shop  = s_data['shop']
             query = s_data['queries'][0]
             return Event(pdu.cUpdate, [shop] + query)
+
+        elif event.type == pdu.sAuthErr:
+            quit = True
+            a_authErr(d)
+            return
     # }}}
 
     elif state == client.main_auth_d: # {{{
         if event.type == pdu.sAuthOK:
             state = client.dwn_wait
             return Event(pdu.cDownload, s_data)
+
+        elif event.type == pdu.sAuthErr:
+            quit = True
+            a_authErr(d)
+            return
     # }}}
 
     elif state == client.main_auth_s: # {{{
-        pass
+        if None: pass
+
+        elif event.type == pdu.sAuthErr:
+            quit = True
+            a_authErr(d)
+            return
     # }}}
 
     elif state == client.main_ready: # {{{
@@ -243,6 +258,9 @@ def p_dwnFile(d):
     pass
 
 # ACTIONS ##############################################################
+
+def a_authErr(d):
+    log('Authentication error: user \'%s\'.' % user)
 
 def a_updOK(d):
     log('Update OK')
