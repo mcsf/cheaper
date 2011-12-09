@@ -37,8 +37,7 @@ def checkargs():
 def log(*msg):
     global log_lock
     log_lock.acquire()
-    utils.log('[main server %s]' % os.getpid())
-    utils.log(*msg)
+    utils.log('[main server %s]' % os.getpid(), *msg)
     log_lock.release()
 
 
@@ -65,7 +64,7 @@ def sock_udp(h, p):
 # GLOBALS ##############################################################
 
 log_lock = threading.Lock()
-thr_no   = 1
+thr_no   = 0
 db       = DB(DB_FILE, threading.Lock())
 cache    = Cache(threading.Lock())
 
@@ -75,6 +74,7 @@ cache    = Cache(threading.Lock())
 class ClientHandler(threading.Thread):
     def __init__(self, channel, client):
         global thr_no
+        thr_no += 1
 
         threading.Thread.__init__(self)
         self.daemon  = True
@@ -84,7 +84,6 @@ class ClientHandler(threading.Thread):
         self.client  = client
         self.state   = server.main_anonymous
         self.user    = None
-        thr_no += 1
 
     def listen(self):
         rl, _, _ = select.select([self.channel], [], [])
@@ -95,8 +94,7 @@ class ClientHandler(threading.Thread):
     def log(self, *msg):
         global log_lock
         log_lock.acquire()
-        utils.log(self.strid)
-        utils.log(*msg)
+        utils.log(self.strid, *msg)
         log_lock.release()
 
     def process(self, event):

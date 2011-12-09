@@ -137,6 +137,7 @@ def process(event):
 
         elif event.type == pdu.iQuit:
             quit = True
+            return
     # }}}
 
     elif state == client.main_auth_u: # {{{
