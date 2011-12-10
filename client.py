@@ -313,8 +313,8 @@ def process(event):
     # }}}
 
     elif state == client.syn_wait_quit: # {{{
-        quit = True
         if event.type == pdu.sSynOK:
+            quit = True
             t_synch.cancel()
             return
     # }}}
