@@ -61,7 +61,28 @@ def download(args):
 
 
 def synch(args):
-    log("Read: SYNCH", args.split())
+
+    usage = 'Syntax: L1: A1[-file]/P1->P2'
+
+    store, rest = args.partition(':')[::2]
+    if not rest:
+        log(usage)
+        return
+
+    item, rest = rest.partition('/')[::2]
+    if not rest:
+        log(usage)
+        return
+
+    item, fpath = item.partition('-')[::2]
+
+    p1, p2 = rest.partition('->')[::2]
+    if not p2:
+        log(usage)
+        return
+
+    return Event(pdu.iSynch, [x.strip() for x in [store, item, fpath, p1, p2]])
+
 
 def quit(args):
     return Event(pdu.iQuit)

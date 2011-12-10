@@ -215,6 +215,10 @@ def process(event):
             state = client.dwn_wait
             return Event(pdu.cDownload, d)
 
+        elif event.type == pdu.iSynch:
+            state = client.syn_wait
+            return Event(pdu.cSynch, d)
+
         elif event.type == pdu.iQuit:
             quit = True
             return
