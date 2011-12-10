@@ -64,24 +64,24 @@ def synch(args):
 
     usage = 'Syntax: L1: A1[-file]/P1->P2'
 
-    store, rest = args.partition(':')[::2]
+    store, rest = [x.strip() for x in args.partition(':')[::2]]
     if not rest:
         log(usage)
         return
 
-    item, rest = rest.partition('/')[::2]
+    item, rest = [x.strip() for x in rest.partition('/')[::2]]
     if not rest:
         log(usage)
         return
 
     item, fpath = item.partition('-')[::2]
 
-    p1, p2 = rest.partition('->')[::2]
+    p1, p2 = [x.strip() for x in rest.partition('->')[::2]]
     if not p2:
         log(usage)
         return
 
-    return Event(pdu.iSynch, [x.strip() for x in [store, item, fpath, p1, p2]])
+    return Event(pdu.iSynch, [store, item, fpath, float(p1), float(p2)])
 
 
 def quit(args):

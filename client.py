@@ -23,6 +23,9 @@ DEF_PASS = 'guest'
 DEF_SERV = 'S1'
 FILE_DIR = 'files'
 
+# Timeouts
+T_SYNCH  = 3
+
 
 # INPUT PROCESSING #####################################################
 
@@ -66,6 +69,9 @@ def connection(h, p):
 
 state  = client.main_init
 s_data = None # State related data (see: transition from auth_u to wait)
+
+# Timers
+t_synch = None
 
 
 # WORKER THREADS #######################################################
@@ -154,13 +160,13 @@ def process(event):
             return Event(pdu.cAuth, data)
 
         elif event.type == pdu.iDownload:
-            state  = client.main_auth_u
+            state  = client.main_auth_d
             s_data = d
             data = { 'user': user, 'passwd': passwd }
             return Event(pdu.cAuth, data)
 
         elif event.type == pdu.iSynch:
-            state  = client.main_auth_u
+            state  = client.main_auth_s
             s_data = d
             data = { 'user': user, 'passwd': passwd }
             return Event(pdu.cAuth, data)
@@ -195,7 +201,10 @@ def process(event):
     # }}}
 
     elif state == client.main_auth_s: # {{{
-        if None: pass
+        if event.type == pdu.sAuthOK:
+            state = client.syn_wait
+            a_synSetTimeout(d)
+            return Event(pdu.cSynch, s_data)
 
         elif event.type == pdu.sAuthErr:
             quit = True
@@ -217,6 +226,7 @@ def process(event):
 
         elif event.type == pdu.iSynch:
             state = client.syn_wait
+            a_synSetTimeout(d)
             return Event(pdu.cSynch, d)
 
         elif event.type == pdu.iQuit:
@@ -282,6 +292,26 @@ def process(event):
             return
     # }}}
 
+    elif state == client.syn_wait: # {{{
+        if event.type == pdu.sSynOK:
+            t_synch.cancel()
+            state = client.main_ready
+            a_synOK(d)
+            return
+
+        elif event.type == pdu.iQuit:
+            state = client.syn_wait_quit
+            a_synWait(d)
+            return
+    # }}}
+
+    elif state == client.syn_wait_quit: # {{{
+        quit = True
+        if event.type == pdu.sSynOK:
+            t_synch.cancel()
+            return
+    # }}}
+
 
 # PREDICATES ###########################################################
 
@@ -314,6 +344,27 @@ def a_updSend(d):
 
 def a_dwnOK(d):
     log('Download OK')
+
+def a_synOK(d):
+    log('Synch OK. Found culprit to be user', d)
+
+def a_synWait(d):
+    log('Wait for Synch to end.')
+
+def a_synTimeout():
+    global state, quit, locsrv
+    log('Synch timeout.')
+    if state == client.syn_wait_quit:
+        quit = True
+        locsrv.shutdown(socket.SHUT_RD)
+    else:
+        state = client.main_ready
+        log('STAT', state)
+
+def a_synSetTimeout(d):
+    global t_synch
+    t_synch = threading.Timer(T_SYNCH, a_synTimeout)
+    t_synch.start()
 
 ########################################################################
 

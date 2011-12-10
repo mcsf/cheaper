@@ -136,7 +136,8 @@ class ClientHandler(threading.Thread):
                 store, item, fpath, p1, p2 = d
 
                 # Generate Request event for other servers
-                req = Event(pdu.sSynRqst, [self.thr_no, store, item, p1, p2])
+                req = Event(pdu.sSynRqst,
+                        [self.thr_no, store, item, p1, p2, self.user])
 
                 # Queue through which ServerHandlers will signal their completion
                 pending[self.thr_no] = Queue.Queue()
@@ -154,7 +155,7 @@ class ClientHandler(threading.Thread):
                 else:
                     _, user = resp['data']
                     self.log('Forwarding', resp.type)
-                    return Event(pdu.sSynResp, user)
+                    return Event(pdu.sSynOK, user)
 
         # }}}
 
@@ -242,11 +243,20 @@ class ServerHandler(threading.Thread):
             pass
 
         elif self.rqst.type == pdu.sSynRqst:
-            thr_no, store, item, p1, p2 = d
-            # if culprit is found, forward its username:
-            user = 'foobar'
-            self.write(Event(pdu.sSynResp, [thr_no, user]))
-            return
+            thr_no, store, item, p1, p2, new_user = d
+            entries = db.get(store, item)
+            # (store, item) form a primary key, so 'entries' can only have 0 or
+            # 1 elements. Using a 'for' is just syntactic sugar addiction.
+            for e in entries:
+                # if the mistake is found in the DB
+                if e[db.PRICE] == p1:
+                    # find its culprit
+                    old_user = e[db.USER]
+                    # fix the DB entry
+                    db.update(store, item, e[db.FPATH], p2, new_user)
+                    # forward the culprit's username:
+                    self.write(Event(pdu.sSynResp, [thr_no, old_user]))
+                    return
 
         elif self.rqst.type == pdu.sSynResp:
             thr_no, user = d
