@@ -3,6 +3,10 @@
 import sqlite3
 
 class DB:
+
+    # Indices for table columns
+    STORE, ITEM, FPATH, PRICE, USER = range(5)
+
     def __init__(self, fpath, lock):
         self.con  = sqlite3.connect(fpath, check_same_thread=False)
         self.cur  = self.con.cursor()
@@ -60,14 +64,25 @@ class DB:
         self.con.commit()
         self.lock.release()
 
-    def get(self, key=None, value=None):
+    def _get(self, key=None, value=None):
         query = 'SELECT * FROM data '
         if key and value:
             query += '''WHERE %s = '%s';''' % (key, value)
         self.lock.acquire()
         self.cur.execute(query)
+        r = self.cur.fetchall()
         self.lock.release()
-        return self.cur.fetchall()
+        return r
+
+    def get(self, store, item):
+        query = '''
+            SELECT * FROM data WHERE store = '%s' AND item = '%s';
+        ''' % (store, item)
+        self.lock.acquire()
+        self.cur.execute(query)
+        r = self.cur.fetchall()
+        self.lock.release()
+        return r
 
 
 class Cache(DB):
