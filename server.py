@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import Queue
 import select
 import socket
 import sys
@@ -67,6 +68,8 @@ log_lock = threading.Lock()
 thr_no   = 0
 db       = DB(DB_FILE, threading.Lock())
 cache    = Cache(threading.Lock())
+outgoing = Queue.Queue() # UDP stuff to send out
+pending  = {} # a dict of Queue objects
 
 
 # SERVER THREADS #######################################################
@@ -78,7 +81,7 @@ class ClientHandler(threading.Thread):
 
         threading.Thread.__init__(self)
         self.daemon  = True
-        self.count   = thr_no
+        self.thr_no  = thr_no
         self.strid   = '[handler %s]' % thr_no
         self.channel = channel
         self.client  = client
@@ -127,7 +130,32 @@ class ClientHandler(threading.Thread):
                 pass
 
             elif event.type == pdu.cSynch:
-                pass
+                timeout = 3 # will become a global constant
+
+                # Get data
+                store, item, fpath, p1, p2 = d
+
+                # Generate Request event for other servers
+                req = Event(pdu.sSynRqst, [self.thr_no, store, item, p1, p2])
+
+                # Queue through which ServerHandlers will signal their completion
+                pending[self.thr_no] = Queue.Queue()
+
+                # Send out the requests
+                for s, dst in servers.items():
+                    outgoing.put((req, dst))
+
+                try:
+                    # Wait for *any* result to arrive to the queue or timeout
+                    resp = pending[self.thr_no].get(True, timeout)
+                except Queue.Empty:
+                    # no server replied.
+                    self.log('Synch timeout')
+                else:
+                    _, user = resp['data']
+                    self.log('Forwarding', resp.type)
+                    return Event(pdu.sSynResp, user)
+
         # }}}
 
 
@@ -187,7 +215,7 @@ class ClientHandler(threading.Thread):
 
 
 class ServerHandler(threading.Thread):
-    def __init__(self, rqst, dst, channel):
+    def __init__(self, rqst, dst, queue):
         global thr_no
         thr_no += 1
 
@@ -195,32 +223,44 @@ class ServerHandler(threading.Thread):
         self.strid   = '[udp-handler %s]' % thr_no
         self.rqst    = rqst
         self.dst     = dst
-        self.channel = channel
+        self.queue   = queue
         self.daemon  = True
 
     def log(self, *msg):
         utils.log(self.strid, *msg)
 
     def write(self, s):
-        self.channel.sendto(s, self.dst)
+        self.queue.put((s, self.dst))
 
     def run(self):
+        d = self.rqst['data']
         self.log('RECV %s FROM %s' % (self.rqst.type, self.dst))
+
         if self.rqst.type == pdu.sDwnRqst:
             pass
         elif self.rqst.type == pdu.sDwnResp:
             pass
+
         elif self.rqst.type == pdu.sSynRqst:
-            pass
+            thr_no, store, item, p1, p2 = d
+            # if culprit is found, forward its username:
+            user = 'foobar'
+            self.write(Event(pdu.sSynResp, [thr_no, user]))
+            return
+
         elif self.rqst.type == pdu.sSynResp:
-            pass
+            thr_no, user = d
+            pending[thr_no].put(self.rqst)
+            return
 
 
 class UDPListener(threading.Thread):
-    def __init__(self, channel):
+    def __init__(self, channel, lock, queue):
         threading.Thread.__init__(self)
+        self.daemon  = True
         self.channel = channel
-        self.daemon = True
+        self.lock = lock
+        self.queue = queue
 
     def read(self, data, src):
         if not data: raise ConnectionError
@@ -232,20 +272,43 @@ class UDPListener(threading.Thread):
             if e.type is not None: return (e, src)
 
     def log(self, *s):
-        utils.log('[udp]', *s)
+        utils.log('[udp-main]', *s)
 
     def listen(self):
         rl, _, _ = select.select([self.channel], [], [])
         if rl:
             if self.channel in rl:
-                return self.read(*self.channel.recvfrom(MAX_RECV))
+                self.lock.acquire()
+                data, src = self.channel.recvfrom(MAX_RECV)
+                self.lock.release()
+                return self.read(data, src)
 
     def run(self):
         while True:
             event, src = self.listen()
             if event is not None:
                 self.log('RECV', event.type)
-                ServerHandler(event, src, self.channel).start()
+                ServerHandler(event, src, self.queue).start()
+
+
+class UDPDispatcher(threading.Thread):
+    def __init__(self, channel, lock, queue):
+        threading.Thread.__init__(self)
+        self.channel = channel
+        self.lock    = lock
+        self.queue   = queue
+        self.daemon  = True
+
+    def log(self, *msg):
+        utils.log('[udp-dispatch]', *msg)
+
+    def run(self):
+        while True:
+            event, src = self.queue.get()
+            self.log('Dispatching', event.type)
+            self.lock.acquire()
+            self.channel.sendto(event.encode(), src)
+            self.lock.release()
 
 
 # MAIN #################################################################
@@ -272,12 +335,21 @@ if __name__ == '__main__':
             u, p = line.split()
             users[u] = p
 
+    servers = {}
+    with open(MDB, 'r') as f:
+        for line in f.readlines():
+            s, h, p = [x.strip() for x in line.split()]
+            if s != hostname:
+                servers[s] = (h, int(p))
+
     # Start listening
     c_tcp  = sock_tcp('', port) # For incoming client PDUs
     c_udp  = sock_udp('', port) # For incoming server PDUs
 
     if c_udp:
-        UDPListener(c_udp).start()
+        l = threading.Lock()
+        UDPListener(c_udp, l, outgoing).start()
+        UDPDispatcher(c_udp, l, outgoing).start()
 
     if c_tcp:
         while True:
