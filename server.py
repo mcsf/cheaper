@@ -25,6 +25,9 @@ MDB         = 'mDBs.dat'
 SHOPS       = 'Shops.dat'
 USERS       = 'Users.dat'
 
+# Timeouts
+T_SYNCH     = 3
+
 
 # MISC #################################################################
 
@@ -46,6 +49,7 @@ def log(*msg):
 
 def sock_tcp(h, p):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         s.bind((h, p))
         s.listen(0)
@@ -131,8 +135,6 @@ class ClientHandler(threading.Thread):
                 pass
 
             elif event.type == pdu.cSynch:
-                timeout = 3 # will become a global constant
-
                 # Get data
                 store, item, fpath, p1, p2 = d
 
@@ -149,7 +151,7 @@ class ClientHandler(threading.Thread):
 
                 try:
                     # Wait for *any* result to arrive to the queue or timeout
-                    resp = pending[self.thr_no].get(True, timeout)
+                    resp = pending[self.thr_no].get(True, T_SYNCH)
                 except Queue.Empty:
                     # no server replied.
                     self.log('Synch timeout')
@@ -177,9 +179,6 @@ class ClientHandler(threading.Thread):
         return bool(d[2])
 
     # Actions
-    def a_updProcess(self, d):
-        pass
-
     def a_updRecvFile(self, d):
         pass
 
