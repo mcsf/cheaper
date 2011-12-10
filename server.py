@@ -356,7 +356,7 @@ if __name__ == '__main__':
             break
 
     try:
-        localshops = servers.pop(srvid)
+        localshops = shops.pop(srvid)
     except KeyError:
         raise Exception('Missing description for this server\'s hostname'
                 + ' in file %s' % MDB)
