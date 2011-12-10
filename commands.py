@@ -31,8 +31,6 @@ def update(args):
             log('Item price must be a real number.')
             return
         item, fpath = item.partition('-')[::2]
-        log('Read: UPDATE shop=%s item=%s fpath=%s price=%s'
-                % (shop, item, fpath, price))
         data['queries'].append([item, fpath, price])
 
     return Event(pdu.iUpdate, data)

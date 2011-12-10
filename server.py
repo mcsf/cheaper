@@ -17,6 +17,7 @@ from storage import DB, Cache
 
 # SETTINGS #############################################################
 
+DEBUG       = True
 DB_FILE     = 'data.db'
 SERVER_PORT = 8888
 MAX_RECV    = 1024
@@ -33,7 +34,6 @@ def checkargs():
         int(sys.argv[1]) if argn > 1 else SERVER_PORT,
         sys.argv[2] if argn > 2 else SHOPS,
         sys.argv[3] if argn > 3 else USERS)
-
 
 def log(*msg):
     global log_lock
@@ -95,6 +95,7 @@ class ClientHandler(threading.Thread):
                 return self.read(self.channel.recv(MAX_RECV).strip())
 
     def log(self, *msg):
+        if not DEBUG: return
         global log_lock
         log_lock.acquire()
         utils.log(self.strid, *msg)
@@ -228,6 +229,7 @@ class ServerHandler(threading.Thread):
         self.daemon  = True
 
     def log(self, *msg):
+        if not DEBUG: return
         utils.log(self.strid, *msg)
 
     def write(self, s):
@@ -282,6 +284,7 @@ class UDPListener(threading.Thread):
             if e.type is not None: return (e, src)
 
     def log(self, *s):
+        if not DEBUG: return
         utils.log('[udp-main]', *s)
 
     def listen(self):
@@ -310,6 +313,7 @@ class UDPDispatcher(threading.Thread):
         self.daemon  = True
 
     def log(self, *msg):
+        if not DEBUG: return
         utils.log('[udp-dispatch]', *msg)
 
     def run(self):
@@ -374,7 +378,7 @@ if __name__ == '__main__':
         while True:
             new_chan, new_client = c_tcp.accept()
             ClientHandler(new_chan, new_client).start()
-            log('Accepted new connection.')
+            if DEBUG: log('Accepted new connection.')
 
 
 # vim: ts=8 et sw=4 sts=4 fen fdm=marker

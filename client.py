@@ -16,6 +16,7 @@ from utils import *
 
 # SETTINGS #############################################################
 
+DEBUG    = True
 MTU      = 1024
 MDB      = 'mDBs.dat'
 DEF_USER = 'guest'
@@ -25,6 +26,12 @@ FILE_DIR = 'files'
 
 # Timeouts
 T_SYNCH  = 3
+
+
+# DEBUG ################################################################
+
+def LOG(*msg):
+    if DEBUG: log(*msg)
 
 
 # INPUT PROCESSING #####################################################
@@ -46,9 +53,9 @@ def read_tcp(s):
         e = Event(decode=s)
         if e.type is not None: return e
     except Exception, e:
-        log('---')
-        log('Recv malformed data:', s)
-        log(e)
+        LOG('---')
+        LOG('Recv malformed data:', s)
+        LOG(e)
 
 
 # TCP ##################################################################
@@ -134,7 +141,7 @@ def loop():
     quit = False
 
     while not quit:
-        log('STAT', state)
+        LOG('STAT', state)
         try:
             in_event = listen()
         except ConnectionError:
@@ -142,10 +149,10 @@ def loop():
             quit = True
         else:
             if in_event is not None:
-                log('RECV', in_event.type)
+                LOG('RECV', in_event.type)
                 out_event = process(in_event)
                 if out_event is not None:
-                    log('SEND', out_event.type)
+                    LOG('SEND', out_event.type)
                     locsrv.send(out_event.encode())
 
 def process(event):
@@ -352,14 +359,14 @@ def a_synWait(d):
     log('Wait for Synch to end.')
 
 def a_synTimeout():
-    global state, quit, locsrv
-    log('Synch timeout.')
+    global state, quit, locsrv, verbose
+    if verbose: log('Synch timeout.')
     if state == client.syn_wait_quit:
         quit = True
         locsrv.shutdown(socket.SHUT_RD)
     else:
         state = client.main_ready
-        log('STAT', state)
+        LOG('STAT', state)
 
 def a_synSetTimeout(d):
     global t_synch
