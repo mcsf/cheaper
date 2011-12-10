@@ -336,9 +336,6 @@ if __name__ == '__main__':
             s = [i.strip() for i in p[1].split(',')]
             shops[h] = s
 
-    hostname = 'S1' # should call some sort of gethostname
-    localshops = shops[hostname]
-
     users = {}
     with open(f_users, 'r') as f:
         for line in f.readlines():
@@ -349,8 +346,20 @@ if __name__ == '__main__':
     with open(MDB, 'r') as f:
         for line in f.readlines():
             s, h, p = [x.strip() for x in line.split()]
-            if s != hostname:
-                servers[s] = (h, int(p))
+            servers[s] = (h, int(p))
+
+    hostname = socket.gethostname()
+    srvid, localshops = None, None
+    for k, v in servers.items():
+        if v[0] == hostname and v[1] == port:
+            srvid = k
+            break
+
+    try:
+        localshops = servers.pop(srvid)
+    except KeyError:
+        raise Exception('Missing description for this server\'s hostname'
+                + ' in file %s' % MDB)
 
     # Start listening
     c_tcp  = sock_tcp('', port) # For incoming client PDUs
