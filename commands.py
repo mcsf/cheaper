@@ -51,7 +51,7 @@ def download(args):
         return
 
     data = {
-        'shops': [s.strip() for s in shops.split(',')],
+        'shops': [s.strip() for s in shops.split(',')] if shops else [],
         'items': [i.strip() for i in items.split(',')]
     }
 

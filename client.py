@@ -350,7 +350,9 @@ def a_updSend(d):
     log('Sending file', s_data['queries'][0][1])
 
 def a_dwnOK(d):
-    log('Download OK')
+    log('Download OK. Report follows:')
+    for item in d:
+        log('Item %s costs at least %s.' % (item[1], item[3]))
 
 def a_synOK(d):
     log('Synch OK. Found culprit to be user', d)
