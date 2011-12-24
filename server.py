@@ -5,6 +5,7 @@ import Queue
 import select
 import socket
 import sys
+import time
 import threading
 
 import utils
@@ -24,6 +25,10 @@ MAX_RECV    = 1024
 MDB         = 'mDBs.dat'
 SHOPS       = 'Shops.dat'
 USERS       = 'Users.dat'
+
+# Timeouts
+T_DOWNLOAD  = 3
+T_SYNCH     = 3
 
 
 # MISC #################################################################
@@ -46,6 +51,7 @@ def log(*msg):
 
 def sock_tcp(h, p):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         s.bind((h, p))
         s.listen(0)
@@ -120,36 +126,70 @@ class ClientHandler(threading.Thread):
                 if self.p_updShopOK(d) and self.p_updValueOK(d):
                     if self.p_updFile(d):
                         self.a_updRecvFile(d)
-                    # TODO: actually transfer file or keep old one
                     # Table structure is (store, item, fpath, price, user)
                     db.update(*(d + [self.user]))
                     return Event(pdu.sUpdOK)
                 else:
                     return Event(pdu.sUpdErr)
 
+
             elif event.type == pdu.cDownload:
-                pass
+
+                shops, bests = self.p_dwnHasInfo(d)
+
+                if bests:
+                    return Event(pdu.sDwnInfo, bests)
+
+                else:
+                    # Get data
+                    items = d['items']
+
+                    # Generate Request Event for other servers
+                    rqst = Event(pdu.sDwnRqst, d)
+
+                    # Generate Queue to communicate with ServerHandlers
+                    pending[self.thr_no] = Queue.Queue()
+
+                    for item in items:
+                        for s, dst in servers.items():
+                            for shop in shops:
+                                # If server is eligible
+                                if shop in servershops[s]:
+                                    # Send a request for a given item
+                                    rqst = Event(pdu.sDwnRqst, item)
+                                    outgoing.put((rqst, dst))
+                                    try:
+                                        # Wait for a reply
+                                        resp = pending[self.thr_no].get(True,
+                                                T_DOWNLOAD)
+                                        resps.insert(0, resp)
+                                        # pseudo-code:
+                                        # process reply
+                                        # if has all info needed: break
+                                    except Queue.Empty:
+                                        # Or timeout and move on to next server
+                                        break
+                                break
+
 
             elif event.type == pdu.cSynch:
-                timeout = 3 # will become a global constant
-
                 # Get data
-                store, item, fpath, p1, p2 = d
+                shop, item, fpath, p1, p2 = d
 
                 # Generate Request event for other servers
-                req = Event(pdu.sSynRqst,
-                        [self.thr_no, store, item, p1, p2, self.user])
+                rqst = Event(pdu.sSynRqst,
+                        [self.thr_no, shop, item, p1, p2, self.user])
 
                 # Queue through which ServerHandlers will signal their completion
                 pending[self.thr_no] = Queue.Queue()
 
                 # Send out the requests
                 for s, dst in servers.items():
-                    outgoing.put((req, dst))
+                    outgoing.put((rqst, dst))
 
                 try:
                     # Wait for *any* result to arrive to the queue or timeout
-                    resp = pending[self.thr_no].get(True, timeout)
+                    resp = pending[self.thr_no].get(True, T_SYNCH)
                 except Queue.Empty:
                     # no server replied.
                     self.log('Synch timeout')
@@ -176,10 +216,34 @@ class ClientHandler(threading.Thread):
     def p_updFile(self, d):
         return bool(d[2])
 
-    # Actions
-    def a_updProcess(self, d):
-        pass
+    def p_dwnHasInfo(self, d):
+        items = d['items']
+        shops = d['shops'] or allshops
+        bests = []
 
+        for item in items:
+
+            info = []
+            for shop in shops:
+                found = False
+                fetches = [db.get(shop, item), cache.get(shop, item)]
+                for f in fetches:
+                    if f:
+                        info.insert(0, f[0])
+                        found = True
+                if not found: return shops, None
+
+            # Select cheapest item
+            best = info[0]
+            for i in info:
+                if i[db.PRICE] < best[db.PRICE]:
+                    best = i
+            bests.insert(0, best)
+
+        return shops, bests
+
+
+    # Actions
     def a_updRecvFile(self, d):
         pass
 
@@ -213,6 +277,8 @@ class ClientHandler(threading.Thread):
                         self.log('SEND', out_event.type)
                         self.write(out_event)
         self.log('Thread closing.')
+        if self.thr_no in pending: # Cleanup
+            pending.pop(self.thr_no)
         self.channel.close()
 
 
@@ -240,9 +306,16 @@ class ServerHandler(threading.Thread):
         self.log('RECV %s FROM %s' % (self.rqst.type, self.dst))
 
         if self.rqst.type == pdu.sDwnRqst:
-            pass
+            # pseudo-code:
+            # For a given item, fetch its minimum price found.
+            # Wrap it in a sDwnResp event and write it to channel back to
+            # server.
+            return
+
         elif self.rqst.type == pdu.sDwnResp:
-            pass
+            thr_no, user = d
+            pending[thr_no].put(self.rqst)
+            return
 
         elif self.rqst.type == pdu.sSynRqst:
             thr_no, store, item, p1, p2, new_user = d
@@ -332,13 +405,15 @@ if __name__ == '__main__':
     # Process and get arguments
     port, f_shops, f_users = checkargs()
 
-    shops = {}
+    allshops = set([])
+    servershops = {}
     with open(f_shops, 'r') as f:
         for line in f.readlines():
             p = line.partition(' ')[::2]
             h = p[0]
             s = [i.strip() for i in p[1].split(',')]
-            shops[h] = s
+            for each in s: allshops.add(each)
+            servershops[h] = s
 
     users = {}
     with open(f_users, 'r') as f:
@@ -360,7 +435,8 @@ if __name__ == '__main__':
             break
 
     try:
-        localshops = shops.pop(srvid)
+        servers.pop(srvid)
+        localshops = servershops.pop(srvid)
     except KeyError:
         raise Exception('Missing description for this server\'s hostname'
                 + ' in file %s' % MDB)
