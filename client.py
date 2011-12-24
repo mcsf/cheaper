@@ -90,16 +90,23 @@ class FileUploader(threading.Thread):
         self.fpath   = fpath
 
     def run(self):
-        with open(FILE_DIR + '/' + self.fpath) as f:
-            # Size of an empty transfer PDU
-            hdr_siz = len(Event(pdu.cUpdSending).encode())
-
-            siz = MTU - hdr_siz
+        with open(FILE_DIR + '/' + self.fpath, 'r') as f:
+            e = Event(pdu.cUpdSending)
+            e["file"] = self.fpath
             while True:
-                chunk = f.read(siz)
+                message=e.read_data_and_encode(f, MTU)
+                if len(message) > 0:
+                    self.channel.send(message)
+                    continue
+
+                e = Event(pdu.cUpdFinished)
+                e["file"] = self.fpath
+#######INCOMPLETE
+
+                #chunk = f.read(siz)
                 #print repr(chunk)
-                if not chunk: break
-                e = Event(pdu.cUpdSending, chunk)
+                #if not chunk: break
+                #e = Event(pdu.cUpdSending, chunk)
                 self.channel.send(e.encode())
             self.channel.send(Event(pdu.cUpdSendDone).encode())
         # a_updOK(...)
@@ -120,13 +127,6 @@ def checkargs():
         sys.argv[2+i] if argn > 2+i else DEF_PASS,
         sys.argv[3+i] if argn > 3+i else DEF_SERV,
         bool(i)) # fourth value is verbose switch
-
-def getServer(srvId):
-    with open(MDB, 'r') as f:
-        for line in f.readlines():
-            fields = line.split()
-            if fields[0] == srvId:
-                return (fields[1], int(fields[2]))
 
 def listen():
     rl, _, _ = select.select([sys.stdin, locsrv], [], [])
@@ -381,14 +381,29 @@ if __name__ == '__main__':
     # Process and get arguments
     user, passwd, srvId, verbose = checkargs()
 
-    # Connect to server
-    try:
-        host, port = getServer(srvId)
-    except TypeError:
-        raise Exception('Unknown server ID.')
-    else:
-        locsrv = connection(host, port)
+    # Make a dictionary of existing servers
+    servers = {}
+    with open(MDB, 'r') as f:
+        for line in f.readlines():
+            tokens = line.split()
+            if len(tokens) != 3:
+                if len(tokens) == 0: continue
+                LOG("Ignored line in " + MDB + ": " + line)
+                continue
+            s, h, p = [x.strip() for x in tokens]
+            servers[s] = (h, int(p))
 
+    # Dictionary of active connections to servers
+    connections = {}
+    
+    # Initialize the connection to the local server
+    try:
+        locsrv = connection(*servers[srvId])
+    except KeyError:
+        raise Exception("Invalid local server ID.")
+    
+    connections[srvId] = locsrv
+    
     if locsrv:
         state = client.main_connected
         try:

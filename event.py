@@ -29,8 +29,9 @@ class Event(dict):
         data['attrs'] = self.__dict__.copy()
         data['data']  = self.copy()
         s = b64encode(safe_dump(data))
-        #Make sure we never send something too big
-        assert len(s) <= MAX_SIZ
+        ## This limitation is for PDUs carrying file chunks only.
+        #assert len(s) <= MAX_SIZ
+        ##
         return s
 
     def decode(self, s):
@@ -49,41 +50,55 @@ class Event(dict):
         return self
 
     def read_data_and_encode(self, f, max_size=MAX_SIZ):
+        """
+        Receives self, file object "f" and a maximunreturn size in
+        bytes.  Returns a base64-encoded YAML document with a
+        representation of this object, except for self['data'], which
+        is garbled and in its place will be sent content read() from
+        the file object.  It will read as much data from the file as
+        possible within the given size constraint of the final
+        message.
+
+        Returns an empty string if there is nothing left to read.
+        """
         data = {}
         data['attrs'] = self.__dict__.copy()
         data['data']  = self.copy()
         
         # this makes the yaml module represent the field as binary.
-        data['data']['data'] = "\777"
+        data['data']['data'] = '\777'
         
-        # we want to find out in which line the string above is being represented.
+        # we want to find out in which line the string above is being
+        # represented.
         yaml_doc=safe_dump(data).splitlines()
         yaml_doc
-        data_line=yaml_doc.index("    /w==")
+        data_line=yaml_doc.index('    /w==')
 
-        # Replace it with just the identation spaces.
+        # Replace the line with just the four identation spaces.
         yaml_doc[data_line] = "    "
 
-        # Find out how much space would the YAML document take before adding the file chunk.
+        # Find out how much space would the YAML document take before
+        # adding the file chunk.
         size=0     
         for line in yaml_doc:
             size+=len(line) + 1
         
-        # convert maximum PDU size in maximum yaml document size before converting to base64.
-        print size
+        # convert maximum PDU size in maximum yaml document size
+        # before converting to base64.
         size_avail = (max_size / 4) * 3
-        # subtract space already occupied by the yaml without the file fragment
+        # subtract space already occupied by the yaml without the file
+        # fragment
         size_avail -= size
-        print size_avail
-        # convert size available into maximum size before converting the read chunk into base64
+        # convert size available into maximum size before converting
+        # the read chunk into base64
         read_size = (size_avail / 4) * 3
-        print read_size
 
         # Read as much as we can with the given space.
         chunk=f.read(read_size)
         
+        # Return an empty string if there's nothing to read.
         if len(chunk) == 0:
-            raise Exception('Finished file transfer.')
+            return ""
 
         # Place the base64 representation of the chunk into the line.
         yaml_doc[data_line] += b64encode(chunk)
