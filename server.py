@@ -138,38 +138,55 @@ class ClientHandler(threading.Thread):
                 shops, bests = self.p_dwnHasInfo(d)
 
                 if bests:
+                    # Local server has all the info it needs and immediately
+                    # replies to client
                     return Event(pdu.sDwnInfo, bests)
 
                 else:
-                    # Get data
-                    items = d['items']
 
-                    # Generate Request Event for other servers
-                    rqst = Event(pdu.sDwnRqst, d)
+                    self.log('DWN shops, bests =', shops, bests)
+
+                    items   = d['items']
+                    horizon = [s for s in servers.keys() if
+                                self.p_dwnServerUseful(s, shops)]
+
+                    self.log('DWN items, horizon =', items, horizon)
 
                     # Generate Queue to communicate with ServerHandlers
                     pending[self.thr_no] = Queue.Queue()
 
                     for item in items:
-                        for s, dst in servers.items():
-                            for shop in shops:
-                                # If server is eligible
-                                if shop in servershops[s]:
-                                    # Send a request for a given item
-                                    rqst = Event(pdu.sDwnRqst, item)
-                                    outgoing.put((rqst, dst))
-                                    try:
-                                        # Wait for a reply
-                                        resp = pending[self.thr_no].get(True,
-                                                T_DOWNLOAD)
-                                        resps.insert(0, resp)
-                                        # pseudo-code:
-                                        # process reply
-                                        # if has all info needed: break
-                                    except Queue.Empty:
-                                        # Or timeout and move on to next server
-                                        break
-                                break
+                        shopsvisited = []
+
+                        rqst = Event(pdu.sDwnRqst, (self.thr_no, item, shops))
+
+                        for s in horizon:
+                            # Skip if we have enough data
+                            if self.p_dwnSkipServer(s, shopsvisited):
+                                continue
+
+                            # Send request to server
+                            dst  = servers[s]
+                            outgoing.put((rqst, dst))
+
+                            # Wait for a reply
+                            try:
+                                resp = pending[self.thr_no].get(True, T_DOWNLOAD)
+                            # Or timeout and move on to next server
+                            except Queue.Empty:
+                                continue
+                            # Handle response data
+                            else:
+                                _, best = resp['data']
+                                self.log('DWN RECV best =', best)
+                                if best:
+                                    cache.update(*best)
+                                    shopsvisited.insert(0, shop)
+
+                    # Go through newly added data and return best prices to
+                    # client
+                    _, bests = self.p_dwnHasInfo(d, True)
+                    return Event(pdu.sDwnInfo, bests)
 
 
             elif event.type == pdu.cSynch:
@@ -216,7 +233,7 @@ class ClientHandler(threading.Thread):
     def p_updFile(self, d):
         return bool(d[2])
 
-    def p_dwnHasInfo(self, d):
+    def p_dwnHasInfo(self, d, ignoreerrors=False):
         items = d['items']
         shops = d['shops'] or allshops
         bests = []
@@ -231,7 +248,12 @@ class ClientHandler(threading.Thread):
                     if f:
                         info.insert(0, f[0])
                         found = True
-                if not found: return shops, None
+                if not found and not ignoreerrors:
+                    return shops, None
+
+            self.log('DWN INFO', info)
+
+            if not info: return shops, None
 
             # Select cheapest item
             best = info[0]
@@ -241,6 +263,18 @@ class ClientHandler(threading.Thread):
             bests.insert(0, best)
 
         return shops, bests
+
+    def p_dwnServerUseful(self, s, shops):
+        for shop in servershops[s]:
+            if shop in shops:
+                return True
+        return False
+
+    def p_dwnSkipServer(self, s, v):
+        for shop in servershops[s]:
+            if shop not in v:
+                return False
+        return True
 
 
     # Actions
@@ -306,14 +340,30 @@ class ServerHandler(threading.Thread):
         self.log('RECV %s FROM %s' % (self.rqst.type, self.dst))
 
         if self.rqst.type == pdu.sDwnRqst:
-            # pseudo-code:
-            # For a given item, fetch its minimum price found.
-            # Wrap it in a sDwnResp event and write it to channel back to
-            # server.
+            thr_no, item, shops = d
+            # Get pricing info from DB and cache
+            info = []
+            for shop in shops:
+                found = False
+                fetches = [db.get(shop, item), cache.get(shop, item)]
+                for f in fetches:
+                    if f:
+                        info.insert(0, f[0])
+                        found = True
+                if not found:
+                    self.write(Event(pdu.sDwnResp, (thr_no, None)))
+                    return
+            # Determine store offering best price
+            best = info[0]
+            for i in info:
+                if i[db.PRICE] < best[db.PRICE]:
+                    best = i
+            # Return that information
+            self.write(Event(pdu.sDwnResp, (thr_no, best)))
             return
 
         elif self.rqst.type == pdu.sDwnResp:
-            thr_no, user = d
+            thr_no, _ = d
             pending[thr_no].put(self.rqst)
             return
 
