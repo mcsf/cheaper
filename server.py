@@ -166,7 +166,7 @@ class ClientHandler(threading.Thread):
                                 continue
 
                             # Send request to server
-                            dst  = servers[s]
+                            dst = servers[s]
                             outgoing.put((rqst, dst))
 
                             # Wait for a reply
